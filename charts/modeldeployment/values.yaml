@@ -204,8 +204,8 @@ gatewayName: ""
 # ----------------------------------------------------------------------------
 epp:
   image:
-    repository: "mcr.microsoft.com/oss/v2/llm-d/llm-d-inference-scheduler"
-    tag: "v0.7.1"
+    repository: "mcr.microsoft.com/oss/v2/llm-d/llm-d-router-endpoint-picker"
+    tag: "v0.9.0"
     pullPolicy: "IfNotPresent"
   replicas: 1
   # modelServerPort is the port exposed by the inference (model server) pods.
@@ -219,6 +219,12 @@ epp:
   metricsPort: 9090
   # logVerbosity passed as `--v=<n>`.
   logVerbosity: 1
+  # scorerWeights controls the EPP EndpointPickerConfig plugin weights.
+  # Adjust to trade off load distribution vs prefix-cache affinity.
+  scorerWeights:
+    queue: 2
+    kvCacheUtilization: 2
+    prefixCache: 3
   resources:
     requests:
       cpu: 100m

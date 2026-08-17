@@ -25,6 +25,10 @@ import (
 	"github.com/kaito-project/production-stack/test/e2e/utils"
 )
 
+// intPtr returns a pointer to an int literal — used for optional fields in
+// ModelDeploymentValues (e.g. EPPScorerWeights).
+func intPtr(v int) *int { return &v }
+
 // Inference preset names. These are the underlying KAITO presets and become
 // the InferenceSet's spec.template.inference.preset.name. They do NOT appear
 // in the gateway's HTTPRoute matches — those use the deployment Name.
@@ -235,13 +239,17 @@ var CaseDeployments = map[string][]utils.ModelDeploymentValues{
 			Model:        presetPhi,
 			Replicas:     2,
 			InstanceType: "Standard_NV36ads_A10_v5",
+			// Disable prefix-cache scoring so identical prompts spread
+			// across replicas instead of sticking to one pod.
+			EPPScorerWeights: &utils.EPPScorerWeights{PrefixCache: intPtr(0)},
 		},
 		{
-			Name:         "routing-ministral",
-			Namespace:    "e2e-model-routing",
-			Model:        presetMinistral,
-			Replicas:     2,
-			InstanceType: "Standard_NV36ads_A10_v5",
+			Name:             "routing-ministral",
+			Namespace:        "e2e-model-routing",
+			Model:            presetMinistral,
+			Replicas:         2,
+			InstanceType:     "Standard_NV36ads_A10_v5",
+			EPPScorerWeights: &utils.EPPScorerWeights{PrefixCache: intPtr(0)},
 		},
 	},
 	CasePrefixCache: {
