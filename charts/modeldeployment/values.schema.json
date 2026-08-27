@@ -18,6 +18,11 @@
       "minLength": 1,
       "description": "Inference preset name set on the InferenceSet. MUST be non-empty."
     },
+    "modelAccessSecret": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of a Kubernetes Secret containing the models access credentials for huggingface."
+    },
     "instanceType": {
       "type": "string",
       "minLength": 1,
