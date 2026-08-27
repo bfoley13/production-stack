@@ -20,8 +20,7 @@
     },
     "modelAccessSecret": {
       "type": "string",
-      "minLength": 1,
-      "description": "Name of a Kubernetes Secret containing the models access credentials for huggingface."
+      "description": "Name of a Kubernetes Secret containing the models access credentials for huggingface. Optional."
     },
     "instanceType": {
       "type": "string",
