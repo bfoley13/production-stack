@@ -173,8 +173,8 @@ func (r *ShadowPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if shadowPod.Status.Phase != corev1.PodRunning || shadowPod.Status.PodIP == "" {
-		// Include the blocking container's reason/message so a failed streaming
-		// probe is distinguishable from an image pull or scheduling problem.
+		// Include the blocking container's reason/message for image pull and
+		// scheduling failures.
 		reason, message := firstUnreadyContainerReason(shadowPod)
 		log.Info("shadow pod not yet Running — will retry",
 			"shadowPod", shadowName, "phase", shadowPod.Status.Phase,
@@ -226,7 +226,6 @@ func (r *ShadowPodReconciler) ensureShadowPod(ctx context.Context, original *cor
 		return nil, fmt.Errorf("get shadow pod: %w", err)
 	}
 
-	mode := detectStreamingMode(original)
 	modelName := extractModelName(original)
 	servedModelName := extractServedModelName(original, modelName)
 	servingPort := extractServingPort(original)
@@ -275,41 +274,6 @@ func (r *ShadowPodReconciler) ensureShadowPod(ctx context.Context, original *cor
 		labels[ShadowPodInferenceSetLabelKey] = v
 	}
 
-	// Streaming pods additionally carry a cloned streaming identity and a probe
-	// init container, so the shadow pod also validates that weights are actually
-	// reachable before the simulator is allowed to start.
-	var (
-		identity      streamingIdentity
-		probeCMName   string
-		probeVolumes  []corev1.Volume
-		probeInitCtrs []corev1.Container
-	)
-	switch mode {
-	case streamingModeSAS, streamingModeDirectAzure:
-		identity = buildStreamingIdentity(original, mode)
-		probeCMName = probeScriptConfigMapName(shadowName)
-		if err := r.ensureProbeScriptConfigMap(ctx, shadowNS, probeCMName, ownerRef); err != nil {
-			return nil, fmt.Errorf("ensure probe configmap: %w", err)
-		}
-		for k, v := range identity.podLabels {
-			labels[k] = v
-		}
-		probeInitCtrs = append(probeInitCtrs, identity.initContainers...)
-		probeInitCtrs = append(probeInitCtrs, buildProbeContainer(identity, r.Config, probeCMName))
-		probeVolumes = append(probeVolumes, identity.volumes...)
-		probeVolumes = append(probeVolumes, corev1.Volume{
-			Name: probeCMName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: probeCMName},
-				},
-			},
-		})
-	case streamingModeUnsupported:
-		log.FromContext(ctx).Info("streaming probe skipped: unsupported object-store scheme",
-			"pod", original.Namespace+"/"+original.Name, "model", extractModelName(original))
-	}
-
 	shadow := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            shadowName,
@@ -321,8 +285,6 @@ func (r *ShadowPodReconciler) ensureShadowPod(ctx context.Context, original *cor
 			},
 		},
 		Spec: corev1.PodSpec{
-			ServiceAccountName: identity.serviceAccount,
-			InitContainers:     probeInitCtrs,
 			// System pools may be the only real nodes in a mocked-GPU cluster.
 			Tolerations: []corev1.Toleration{
 				{Key: "CriticalAddonsOnly", Operator: corev1.TolerationOpExists},
@@ -396,11 +358,11 @@ func (r *ShadowPodReconciler) ensureShadowPod(ctx context.Context, original *cor
 		},
 	}
 
-	shadow.Spec.Volumes = append(shadow.Spec.Volumes, probeVolumes...)
-
 	if err := r.Create(ctx, shadow); err != nil {
 		return nil, fmt.Errorf("create shadow pod: %w", err)
 	}
+	log.FromContext(ctx).Info("created simulator-only shadow pod; model authentication and weight access are not validated",
+		"shadowPod", shadowNS+"/"+shadowName)
 	return shadow, nil
 }
 
